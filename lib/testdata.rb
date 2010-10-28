@@ -55,7 +55,7 @@ class Testdata
   def paths() 
     begin
       @success << yield(path = Path.new(@doc))
-    raise
+    rescue
       @success << false
     end
   end
