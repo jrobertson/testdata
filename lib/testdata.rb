@@ -63,4 +63,7 @@ class Testdata
 
   def passed?() @success.all? end
   def score() [@success.grep(true), @success].map(&:length).join('/') end
+  def find_by(s)
+    XPath.match(@doc.root, "records/test/summary[type='#{s}']/description/text()").map(&:to_s)
+  end
 end

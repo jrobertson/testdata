@@ -32,12 +32,16 @@ end
 class Path
   include REXML
 
-  def initialize(doc) @doc = doc end
+  def initialize(doc, success) @doc, @success = doc, success end
 
   def tested? description
     node = XPath.first(@doc.root, "records/test[summary/description='#{description}']")
     raise "Path error: node not found" unless node
-    yield *%w(input output).map {|x| Select.new(x,node)}
+    begin
+      @success << yield(*%w(input output).map {|x| Select.new(x,node)})
+    rescue
+      @success << false
+    end
   end
 end
 
@@ -53,17 +57,10 @@ class Testdata
     @success = []
   end
 
-  def paths() 
-    begin
-      @success << yield(path = Path.new(@doc))
-    rescue
-      @success << false
-    end
-  end
+  def paths() yield(path = Path.new(@doc, @success)) end
   def read_file(s) File.open(s, 'r').read  end
   def read_url(xml_url)  open(xml_url, 'UserAgent' => 'S-Rscript').read  end
 
   def passed?() @success.all? end
-  def score() [@success.grep(true), @success].map(&:length).join('/') end    
- 
+  def score() [@success.grep(true), @success].map(&:length).join('/') end
 end
