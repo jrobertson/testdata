@@ -64,4 +64,6 @@ class Testdata
   def read_url(xml_url)  open(xml_url, 'UserAgent' => 'S-Rscript').read  end
 
   def passed?() @success.all? end
+  def score() [@success.grep(true), @success].map(&:length).join('/') end    
+ 
 end
