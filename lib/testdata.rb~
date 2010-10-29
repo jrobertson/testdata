@@ -9,7 +9,7 @@ class Select
 
   def initialize(type, node)  @node, @type = node, type  end
   
-  def data(x)
+  def data(*raw_x)
 
     stringify = Proc.new {|x| x.texts.length <= 1 ? x.text : x.cdatas.join.strip}
 
@@ -23,6 +23,7 @@ class Select
       XPath.match(@node, xpath).map {|x| stringify.call(x)}
     end
 
+    x = raw_x.length > 1 ? raw_x : raw_x[0]
     values = procs[x.class.to_s.to_sym].call(@type, x) 
     block_given? ? yield(values) : values
   end
