@@ -4,44 +4,43 @@
 
 require 'rexml/document'
 
-class Select
-  include REXML
-
-  def initialize(type, node)  @node, @type = node, type  end
-  
-  def data(*raw_x)
-
-    stringify = Proc.new {|x| x.texts.length <= 1 ? x.text : x.cdatas.join.strip}
-
-    procs = {}
-    procs[:String] = Proc.new do |type,x| 
-      e = XPath.first(@node, "records/io/summary[type='#{type}']/#{x}")
-      stringify.call(e)
-    end
-    procs[:Array] = Proc.new do |type,a|     
-      xpath = a.map {|x| "records/io/summary[type='#{type}']/#{x}"}.join(' | ')
-      XPath.match(@node, xpath).map {|x| stringify.call(x)}
-    end
-
-    x = raw_x.length > 1 ? raw_x : raw_x[0]
-    values = procs[x.class.to_s.to_sym].call(@type, x) 
-    block_given? ? yield(values) : values
-  end
-end
-
 class Path
   include REXML
 
   def initialize(doc, success) @doc, @success = doc, success end
 
   def tested? description
+
+    stringify = Proc.new {|x| x.text.to_s.gsub(/[\n\s]/,'').length > 0 ? x.text : x.cdatas.join.strip}
+
     node = XPath.first(@doc.root, "records/test[summary/description='#{description}']")
+    input_values = XPath.match(node, "records/io/summary[type='input']/*").map(&stringify)
+    output_values = XPath.match(node, "records/io/summary[type='output']/*").map(&stringify)
+
+    path_no = node.text('summary/path')
     raise "Path error: node not found" unless node
+    
+    result = nil
+    @success << [nil, path_no.to_i]      
+    
     begin
-      @success << yield(*%w(input output).map {|x| Select.new(x,node)})
+
+      values = input_values - ['input']
+      expected = (output_values - ['output']).first
+       
+      yield
+
+      raw_result =  test(*values)
+      result = raw_result.strip == expected.strip
+
     rescue
-      @success << false
+      result = false
+    ensure
+      @success[-1][0] = result
     end
+  end
+
+  def test(*values)
   end
 end
 
@@ -51,6 +50,7 @@ class Testdata
   attr_reader :success  
  
   def initialize(s)
+    #puts 'filex : ' + $0
     buffer = self.send('read_' + (s[/https?:\/\//] ? 'file' : 'url'), s)   
     @doc = Document.new(buffer)
     raise "Testdata error: doc %s not found" % s unless @doc
@@ -61,6 +61,15 @@ class Testdata
   def read_file(s) File.open(s, 'r').read  end
   def read_url(xml_url)  open(xml_url, 'UserAgent' => 'S-Rscript').read  end
 
-  def passed?() @success.all? end
-  def score() [@success.grep(true), @success].map(&:length).join('/') end
+  def passed?() @success.map(&:first).all? end
+  def score() success = @success.map(&:first); [success.grep(true), success].map(&:length).join('/') end
+  def summary()
+    a = @success.map(&:last).sort
+    {false: @success.select{|x| x[0] == false}.map(&:last).sort,
+     nil: ((a[0]..a[-1]).to_a - a)}
+  end
+  
+  def find_by(s)
+    XPath.match(@doc.root, "records/test/summary[type='#{s}']/description/text()").map(&:to_s)
+  end
 end
