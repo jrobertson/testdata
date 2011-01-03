@@ -26,12 +26,17 @@ class Path
     begin
 
       values = input_values - ['input']
-      expected = (output_values - ['output']).first
+      expected = (output_values - ['output'])
        
       yield
 
       raw_result =  test(*values)
-      result = raw_result.strip == expected.strip
+
+      if raw_result then
+        result = [raw_result].flatten.map(&:strip) == expected.map(&:strip)
+      else
+        result = [raw_result].compact == expected
+      end
 
     rescue
       result = false
