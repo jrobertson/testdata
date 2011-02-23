@@ -124,7 +124,7 @@ class Testdata
       s = Rscript.new.read script_file.split(/\s/)
     else
 
-      file_path = File.exists?(script_file) ? script : @filepath + '/' + script_file
+      file_path = File.exists?(script_file) ? script_file : @filepath + '/' + script_file
       s = File.open(file_path,'r').read
     end
 

@@ -2,7 +2,8 @@
 
 # file: testdata.rb
 
-require 'builder'
+require 'rexle'
+require 'rexle-builder'
 require 'rexml/document'
 
 class Path
@@ -57,8 +58,9 @@ class Path
         result = [raw_result].compact == expected
       end
 
-    rescue
-      err_label = 'error: ' + ($!).to_s
+    rescue Exception => e  
+      err_label = e.message + " :: \n" + e.backtrace.join("\n")
+
       puts err_label
       XPath.first(node_result, "error").text = err_label
       result = false
@@ -116,9 +118,15 @@ class Testdata
   private
 
   def tests()
-    script = XPath.first(@doc.root, "summary/script/text()").to_s
-    file_path = File.exists?(script) ? script : @filepath + '/' + script
-    s = File.open(file_path,'r').read
+    script_file = XPath.first(@doc.root, "summary/script/text()").to_s
+
+    if script_file[/\/\/job:/] then
+      s = Rscript.new.read script_file.split(/\s/)
+    else
+
+      file_path = File.exists?(script_file) ? script : @filepath + '/' + script_file
+      s = File.open(file_path,'r').read
+    end
 
     stringify = Proc.new {|x| x.text.to_s.gsub(/[\n\s]/,'').length > 0 ? x.text : x.cdatas.join.strip}
 
@@ -159,10 +167,9 @@ class Testdata
 
   def tests_to_dynarex(tests)
 
-    xml = Builder::XmlMarkup.new( target: buffer='', indent: 2 )
-    xml.instruct! :xml, version: "1.0", encoding: "UTF-8"
+    xml = RexleBuilder.new
 
-    xml.results do
+    a = xml.results do
       xml.summary do
         xml.recordx_type 'dynarex'
         xml.format_mask '[!path_no] [!title] [!test] [!expected] [!actual]'
@@ -198,7 +205,7 @@ class Testdata
       end
     end    
 
-    buffer
+    Rexle.new(a).xml pretty: true
   end
 
 end
