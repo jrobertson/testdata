@@ -123,7 +123,7 @@ class Testdata
     script_file = XPath.first(@doc.root, "summary/script/text()").to_s
 
     if script_file[/\/\/job:/] then
-      s = RScript.new.read script_file.split(/\s/)
+      s = RScript.new.read(script_file.split(/\s/)).first
     else
 
       file_path = File.exists?(script_file) ? script_file : @filepath + '/' + script_file
