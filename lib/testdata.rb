@@ -2,7 +2,8 @@
 
 # file: testdata.rb
 
-require 'builder'
+require 'rexle'
+require 'rexle-builder'
 require 'rexml/document'
 
 class Path
@@ -22,8 +23,13 @@ class Path
     output_values = XPath.match(node, "records/io/summary[type='output']/*").map(&stringify)
 
     path_no = node.text('summary/path')
-    actual = XPath.first(@log.root, "records/result[path_no='#{path_no}']/actual") if @log
 
+    if @log then
+      node_result = XPath.first(@log.root, "records/result[path_no='#{path_no}']")
+      actual = XPath.first(node_result, "actual")  
+    end
+
+    puts 'path_no : ' + path_no
     
     result = nil
     @success << [nil, path_no.to_i]      
@@ -40,17 +46,23 @@ class Path
       if raw_result then
         a = [raw_result].flatten.map(&:strip)
         b = expected.map(&:strip)
+
+        # actual.text is used by the log file
         actual.text = a.join("\n")[/</] ? CData.new("\n%s\n" % a.join("\n")) : a.join("\n") if @log
 
-        # puts 'a : ' + a.inspect + ' a :' + a[0].length.to_s
-        # puts 'b : ' + b.inspect + ' b :' + b[0].length.to_s
+        #puts 'a : ' + a.inspect + ' : ' + a[0].length.to_s
+        #puts 'b : ' + b.inspect + ' b :' + b[0].length.to_s
+
         result = a == b
       else
         result = [raw_result].compact == expected
       end
 
-    rescue
-      puts 'error: ' + ($!).to_s
+    rescue Exception => e  
+      err_label = e.message + " :: \n" + e.backtrace.join("\n")
+
+      puts err_label
+      XPath.first(node_result, "error").text = err_label
       result = false
     ensure
       @success[-1][0] = result
@@ -106,8 +118,15 @@ class Testdata
   private
 
   def tests()
-    script = XPath.first(@doc.root, "summary/script/text()").to_s
-    s = File.open(@filepath + '/' + script,'r').read
+    script_file = XPath.first(@doc.root, "summary/script/text()").to_s
+
+    if script_file[/\/\/job:/] then
+      s = Rscript.new.read script_file.split(/\s/)
+    else
+
+      file_path = File.exists?(script_file) ? script : @filepath + '/' + script_file
+      s = File.open(file_path,'r').read
+    end
 
     stringify = Proc.new {|x| x.text.to_s.gsub(/[\n\s]/,'').length > 0 ? x.text : x.cdatas.join.strip}
 
@@ -138,6 +157,7 @@ class Testdata
           body.gsub!(/#{keyword}(?!:)/, "'%s'" % value )
         end
       end
+      #puts 'xxxxx : ' + body.to_s
       [path_no, content[i][0], body, output]  
     end
 
@@ -147,36 +167,45 @@ class Testdata
 
   def tests_to_dynarex(tests)
 
-    xml = Builder::XmlMarkup.new( target: buffer='', indent: 2 )
-    xml.instruct! :xml, version: "1.0", encoding: "UTF-8"
+    xml = RexleBuilder.new
 
-    xml.results do
+    a = xml.results do
       xml.summary do
         xml.recordx_type 'dynarex'
         xml.format_mask '[!path_no] [!title] [!test] [!expected] [!actual]'
         xml.schema 'results/result(path_no, title, test, expected, actual)'
       end
       xml.records do
-        tests.each do |path_no, title, test, expected|
+        tests.each do |path_no, title, testx, expected|
+
           xml.result do
             xml.path_no path_no
             xml.title title
 
-            xml.test do
-              test[/[<>]/] ? xml.cdata!("\n%s\n" % test) : test
+            if testx[/[<>]/] then
+              xml.testx do
+                xml.cdata!("\n%s\n" % testx)
+              end
+            else
+              xml.testx testx            
             end
 
-            xml.expected do
-              expected[/</] ? xml.cdata!("\n%s\n" % expected) : expected
+            if expected[/</] then
+              xml.expected do
+                xml.cdata!("\n%s\n" % expected) 
+              end
+            else
+              xml.expected  expected
             end
 
             xml.actual
+            xml.error
           end
         end
       end
     end    
 
-    buffer
+    Rexle.new(a).xml pretty: true
   end
 
 end

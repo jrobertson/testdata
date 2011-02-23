@@ -22,8 +22,13 @@ class Path
     output_values = XPath.match(node, "records/io/summary[type='output']/*").map(&stringify)
 
     path_no = node.text('summary/path')
-    actual = XPath.first(@log.root, "records/result[path_no='#{path_no}']/actual")
 
+    if @log then
+      node_result = XPath.first(@log.root, "records/result[path_no='#{path_no}']")
+      actual = XPath.first(node_result, "actual")  
+    end
+
+    puts 'path_no : ' + path_no
     
     result = nil
     @success << [nil, path_no.to_i]      
@@ -40,17 +45,22 @@ class Path
       if raw_result then
         a = [raw_result].flatten.map(&:strip)
         b = expected.map(&:strip)
-        actual.text = a.join("\n")[/</] ? CData.new("\n%s\n" % a.join("\n")) : a.join("\n")
 
-        # puts 'a : ' + a.inspect + ' a :' + a[0].length.to_s
-        # puts 'b : ' + b.inspect + ' b :' + b[0].length.to_s
+        # actual.text is used by the log file
+        actual.text = a.join("\n")[/</] ? CData.new("\n%s\n" % a.join("\n")) : a.join("\n") if @log
+
+        #puts 'a : ' + a.inspect + ' : ' + a[0].length.to_s
+        #puts 'b : ' + b.inspect + ' b :' + b[0].length.to_s
+
         result = a == b
       else
         result = [raw_result].compact == expected
       end
 
     rescue
-      puts 'error: ' + ($!).to_s
+      err_label = 'error: ' + ($!).to_s
+      puts err_label
+      XPath.first(node_result, "error").text = err_label
       result = false
     ensure
       @success[-1][0] = result
@@ -66,23 +76,26 @@ class Testdata
 
   attr_reader :success  
  
-  def initialize(s)
+  def initialize(s, options={})
     #puts 'filex : ' + $0
     #puts 'filez : ' + __FILE__
     #puts 'pwd : ' + Dir.pwd
     #exit
+
+    o = {log: false}.merge(options)
+
     @filepath = File.dirname s
     buffer = self.send('read_' + (s[/https?:\/\//] ? 'file' : 'url'), s)   
     @doc = Document.new(buffer)
     raise "Testdata error: doc %s not found" % s unless @doc
     @success = []
 
-    @log =  Document.new(tests)
+    @log =  o[:log] == true ? Document.new(tests) : nil
   end
 
   def paths() 
     yield(path = Path.new(@doc, @log, @success)) 
-    File.open(Dir.pwd + '/.test_log.xml','w'){|f| f.write @log }
+    File.open(Dir.pwd + '/.test_log.xml','w'){|f| f.write @log } if @log
   end
 
   def read_file(s) File.open(s, 'r').read  end
@@ -104,7 +117,8 @@ class Testdata
 
   def tests()
     script = XPath.first(@doc.root, "summary/script/text()").to_s
-    s = File.open(@filepath + '/' + script,'r').read
+    file_path = File.exists?(script) ? script : @filepath + '/' + script
+    s = File.open(file_path,'r').read
 
     stringify = Proc.new {|x| x.text.to_s.gsub(/[\n\s]/,'').length > 0 ? x.text : x.cdatas.join.strip}
 
@@ -135,6 +149,7 @@ class Testdata
           body.gsub!(/#{keyword}(?!:)/, "'%s'" % value )
         end
       end
+      #puts 'xxxxx : ' + body.to_s
       [path_no, content[i][0], body, output]  
     end
 
@@ -154,20 +169,30 @@ class Testdata
         xml.schema 'results/result(path_no, title, test, expected, actual)'
       end
       xml.records do
-        tests.each do |path_no, title, test, expected|
+        tests.each do |path_no, title, testx, expected|
+
           xml.result do
             xml.path_no path_no
             xml.title title
 
-            xml.test do
-              test[/[<>]/] ? xml.cdata!("\n%s\n" % test) : test
+            if testx[/[<>]/] then
+              xml.testx do
+                xml.cdata!("\n%s\n" % testx)
+              end
+            else
+              xml.testx testx            
             end
 
-            xml.expected do
-              expected[/</] ? xml.cdata!("\n%s\n" % expected) : expected
+            if expected[/</] then
+              xml.expected do
+                xml.cdata!("\n%s\n" % expected) 
+              end
+            else
+              xml.expected  expected
             end
 
             xml.actual
+            xml.error
           end
         end
       end
