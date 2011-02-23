@@ -3,8 +3,10 @@
 # file: testdata.rb
 
 require 'rexle'
+require 'rscript'
 require 'rexle-builder'
 require 'rexml/document'
+
 
 class Path
   include REXML
