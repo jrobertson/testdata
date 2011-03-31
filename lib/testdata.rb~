@@ -2,212 +2,139 @@
 
 # file: testdata.rb
 
-require 'rexle'
-require 'rscript'
-require 'rexle-builder'
 require 'rexml/document'
+require 'app-routes'
 
-
-class Path
+class Testdata
   include REXML
+  include AppRoutes
 
-  def initialize(doc, log, success) 
-    @doc, @log, @success = doc, log, success 
+  attr_accessor :debug
+
+  def initialize(s, options={})
+    @route = {}; @params = {} # used by app-routes
+    @success = [] # used by summary
+    @debug = false
+
+    # open the testdata document
+    procs = {
+      String: proc {|x|
+                    
+        if x[/https?:\/\//] then
+          read_url x
+        elsif x.strip[/^</] then
+          x
+        else
+          read_file x
+        end                   
+      },
+      Polyrex: proc {|x| x.to_xml}
+    }
+    buffer =  procs[s.class.to_s.to_sym].call(s)
+    @doc = Document.new(buffer)
+
+    o = {log: false}.merge(options)
+    @log =  o[:log] == true ? Document.new(tests) : nil
   end
 
-  def tested? description
+  def testdata_values(id)
 
-    stringify = Proc.new {|x| x.text.to_s.gsub(/[\n\s]/,'').length > 0 ? x.text : x.cdatas.join.strip}
-
-    node = XPath.first(@doc.root, "records/test[summary/description='#{description}']")
-    raise "Path error: node title not found" unless node
-    input_values = XPath.match(node, "records/io/summary[type='input']/*").map(&stringify)
-    output_values = XPath.match(node, "records/io/summary[type='output']/*").map(&stringify)
-
-    path_no = node.text('summary/path')
-
-    if @log then
-      node_result = XPath.first(@log.root, "records/result[path_no='#{path_no}']")
-      actual = XPath.first(node_result, "actual")  
+    stringify = Proc.new do |x| 
+      r = x.text.to_s.gsub(/^[\n\s]+/,'').length > 0 ? x.text : x.cdatas.join.strip
+      REXML::Text::unnormalize(r)
     end
 
-    puts 'path_no : ' + path_no
+    node = XPath.first(@doc.root, "records/test[summary/path='#{id}']")
+    raise "Path error: node title not found" unless node
+
+    path_no = node.text('summary/path').to_s
+
+    xpath = "records/io/summary[type='input']/*"
+    input_values = XPath.match(node, xpath)[1..-1].map(&stringify)
+
+    # find the type or description
+    xpath = "summary/type/text() | summary/description/text()"
+    type_or_desc = XPath.match(node, xpath).map(&:to_s).find{|x| x != ''}
+
+    xpath = "records/io/summary[type='output']/*"
+    raw_output = XPath.match(node, xpath)
+    output_values = raw_output.length > 0 ? raw_output[1..-1].map(&stringify) : []
     
+    [path_no, input_values, type_or_desc, output_values]
+  end
+
+  def run(x=nil, debug2=nil)
+    @debug2 = debug2 ? true : false
+    @success = []
+    procs = {NilClass: :test_all, Range: :test_all, String: :test_id, Fixnum: :test_id}
+    method(procs[x.class.to_s.to_sym]).call(x)
+    summary()
+  end
+
+  def test_all(x)
+    x ||=(0..-1)
+
+    XPath.match(@doc.root, "records/test/summary/path/text()")[x].each do |id|
+      puts 'id : ' + id.to_s
+      test_id(id)
+    end
+  end
+
+  def test_id(id='')
+
+    path_no, @inputs, tod, expected = testdata_values(id.to_s)
+    routes()
+    raw_actual = run_route tod
+
     result = nil
     @success << [nil, path_no.to_i]      
-    
+
     begin
 
-      values = input_values - ['input']
-      expected = (output_values - ['output'])
-       
-      yield
+      if raw_actual then
 
-      raw_result =  test(*values)
-
-      if raw_result then
-        a = [raw_result].flatten.map(&:strip)
+        a = raw_actual.is_a?(String) ? [raw_actual].flatten.map(&:strip) : raw_actual
         b = expected.map(&:strip)
 
-        # actual.text is used by the log file
-        actual.text = a.join("\n")[/</] ? CData.new("\n%s\n" % a.join("\n")) : a.join("\n") if @log
-
-        #puts 'a : ' + a.inspect + ' : ' + a[0].length.to_s
-        #puts 'b : ' + b.inspect + ' b :' + b[0].length.to_s
+        if @debug == true or @debug2 == true then
+          puts "\n" + tod
+          puts "\nexpected : " + b.inspect
+          puts "\nactual : " + a.inspect + "\n"
+        end
 
         result = a == b
       else
-        result = [raw_result].compact == expected
+        result = [raw_actual].compact == expected
       end
 
     rescue Exception => e  
       err_label = e.message + " :: \n" + e.backtrace.join("\n")
 
       puts err_label
-      XPath.first(node_result, "error").text = err_label
       result = false
     ensure
       @success[-1][0] = result
     end
   end
 
-  def test(*values)
-  end
-end
-
-class Testdata
-  include REXML
-
-  attr_reader :success  
- 
-  def initialize(s, options={})
-    #puts 'filex : ' + $0
-    #puts 'filez : ' + __FILE__
-    #puts 'pwd : ' + Dir.pwd
-    #exit
-
-    o = {log: false}.merge(options)
-
-    @filepath = File.dirname s
-    buffer = self.send('read_' + (s[/https?:\/\//] ? 'file' : 'url'), s)   
-    @doc = Document.new(buffer)
-    raise "Testdata error: doc %s not found" % s unless @doc
-    @success = []
-
-    @log =  o[:log] == true ? Document.new(tests) : nil
-  end
-
-  def paths() 
-    yield(path = Path.new(@doc, @log, @success)) 
-    File.open(Dir.pwd + '/.test_log.xml','w'){|f| f.write @log } if @log
+  def routes(*args)
+    # override this method in the child class
   end
 
   def read_file(s) File.open(s, 'r').read  end
   def read_url(xml_url)  open(xml_url, 'UserAgent' => 'S-Rscript').read  end
 
-  def passed?() @success.map(&:first).all? end
-  def score() success = @success.map(&:first); [success.grep(true), success].map(&:length).join('/') end
+  def get(s)
+    @inputs = @inputs.first if @inputs.length == 1
+    super(s){yield(@inputs)}
+  end
+
   def summary()
+    success = @success.map(&:first)
     a = @success.map(&:last).sort
-    {false: @success.select{|x| x[0] == false}.map(&:last).sort,
-     nil: ((a[0]..a[-1]).to_a - a)}
+    {
+      score:  [success.grep(true), success].map(&:length).join('/'),
+      failed:  @success.select{|x| x[0] == false}.map(&:last).sort
+    }
   end
-  
-  def find_by(s)
-    XPath.match(@doc.root, "records/test/summary[type='#{s}']/description/text()").map(&:to_s)
-  end
-
-  private
-
-  def tests()
-    script_file = XPath.first(@doc.root, "summary/script/text()").to_s
-
-    if script_file[/\/\/job:/] then
-      s, args = RScript.new.read script_file.split(/\s/)
-    else
-
-      file_path = File.exists?(script_file) ? script_file : @filepath + '/' + script_file
-      s = File.open(file_path,'r').read
-    end
-
-    stringify = Proc.new {|x| x.text.to_s.gsub(/[\n\s]/,'').length > 0 ? x.text : x.cdatas.join.strip}
-
-    raw_paths = s[/testdata\.paths(.*)(?=end)/m,1].split(/(?=path\.tested\?)/)
-    raw_paths.shift
-
-    content = raw_paths.map do |x|
-      title = x[/path\.tested\?\s(.*)\sdo/,1][1..-2]
-      path_test = x[/def.*(?=end)/m]
-      raw_vars = path_test[/def path.test\(([^\)]+)/,1]
-      vars = raw_vars.split(/\s*,\s*/) if raw_vars
-      body = path_test[/def path\.test\([^\)]*\)(.*)(?=end)/m,1]
-      [title, vars, body]
-    end
-
-    r = (0..content.length - 1).map do |i|
-      node = XPath.first(@doc.root, "records/test[#{i+1}]")
-      input_values = XPath.match(node, "records/io/summary[type='input']/*").map(&stringify)
-      path_no = node.text('summary/path').to_s
-      output_values = XPath.match(node, "records/io/summary[type='output']/*").map(&stringify)
-      raw_output = (output_values - ['output'])
-      output = raw_output.join("\n")
-
-      values = input_values - ['input']
-      body = content[i][2].strip.gsub("\n      ","\n")
-      if content[i][1] then
-        content[i][1].zip(values).reverse.each do |keyword, value|
-          body.gsub!(/#{keyword}(?!:)/, "'%s'" % value )
-        end
-      end
-      #puts 'xxxxx : ' + body.to_s
-      [path_no, content[i][0], body, output]  
-    end
-
-    #r.each {|x| x.join("\n")}.join("\n")
-    tests_to_dynarex(r)
-  end
-
-  def tests_to_dynarex(tests)
-
-    xml = RexleBuilder.new
-
-    a = xml.results do
-      xml.summary do
-        xml.recordx_type 'dynarex'
-        xml.format_mask '[!path_no] [!title] [!test] [!expected] [!actual]'
-        xml.schema 'results/result(path_no, title, test, expected, actual)'
-      end
-      xml.records do
-        tests.each do |path_no, title, testx, expected|
-
-          xml.result do
-            xml.path_no path_no
-            xml.title title
-
-            if testx[/[<>]/] then
-              xml.testx do
-                xml.cdata!("\n%s\n" % testx)
-              end
-            else
-              xml.testx testx            
-            end
-
-            if expected[/</] then
-              xml.expected do
-                xml.cdata!("\n%s\n" % expected) 
-              end
-            else
-              xml.expected  expected
-            end
-
-            xml.actual
-            xml.error
-          end
-        end
-      end
-    end    
-
-    Rexle.new(a).xml pretty: true
-  end
-
 end
