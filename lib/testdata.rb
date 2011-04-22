@@ -20,19 +20,19 @@ class Testdata
     procs = {
       String: proc {|x|
                     
-        if x[/https?:\/\//] then
-          read_url x
-        elsif x.strip[/^</] then
+        if x.strip[/^</] then
           x
+        elsif x[/https?:\/\//] then
+          read_url x
         else
           read_file x
         end                   
       },
       Polyrex: proc {|x| x.to_xml}
     }
+
     buffer =  procs[s.class.to_s.to_sym].call(s)
     @doc = Document.new(buffer)
-
     o = {log: false}.merge(options)
     @log =  o[:log] == true ? Document.new(tests) : nil
   end
@@ -50,8 +50,10 @@ class Testdata
     path_no = node.text('summary/path').to_s
 
     xpath = "records/io/summary[type='input']/*"
-    input_values = XPath.match(node, xpath)[1..-1].map(&stringify)
-
+    input_nodes = XPath.match(node, xpath)[1..-1]
+    input_values = input_nodes.map(&stringify)   
+    input_names = input_nodes.map(&:name)
+    
     # find the type or description
     xpath = "summary/type/text() | summary/description/text()"
     type_or_desc = XPath.match(node, xpath).map(&:to_s).find{|x| x != ''}
@@ -60,7 +62,7 @@ class Testdata
     raw_output = XPath.match(node, xpath)
     output_values = raw_output.length > 0 ? raw_output[1..-1].map(&stringify) : []
     
-    [path_no, input_values, type_or_desc, output_values]
+    [path_no, input_values, input_names, type_or_desc, output_values]
   end
 
   def run(x=nil, debug2=nil)
@@ -82,7 +84,7 @@ class Testdata
 
   def test_id(id='')
 
-    path_no, @inputs, tod, expected = testdata_values(id.to_s)
+    path_no, @inputs, input_names, tod, expected = testdata_values(id.to_s)
     tests() # load the routes
     raw_actual = run_route tod
 
@@ -97,9 +99,12 @@ class Testdata
         b = expected.map(&:strip)
 
         if @debug == true or @debug2 == true then
-          puts "\n" + tod
-          puts "\nexpected : " + b.inspect
-          puts "\nactual : " + a.inspect + "\n"
+          inputs = input_names.zip(@inputs).map{|x| '  ' + x.join(": ")}\
+            .join("\n")
+          puts "\ninputs: \n" + inputs
+          puts "\ntype or description:\n  " + tod
+          puts "\nexpected : \n  " + b.inspect
+          puts "\nactual : \n  " + a.inspect + "\n"
         end
 
         result = a == b
@@ -133,6 +138,7 @@ class Testdata
     success = @success.map(&:first)
     a = @success.map(&:last).sort
     {
+      passed: success.all?,
       score:  [success.grep(true), success].map(&:length).join('/'),
       failed:  @success.select{|x| x[0] == false}.map(&:last).sort
     }

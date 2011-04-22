@@ -83,7 +83,7 @@ class Testdata
   def test_id(id='')
 
     path_no, @inputs, tod, expected = testdata_values(id.to_s)
-    routes()
+    tests() # load the routes
     raw_actual = run_route tod
 
     result = nil
@@ -117,16 +117,16 @@ class Testdata
     end
   end
 
-  def routes(*args)
+  def tests(*args)
     # override this method in the child class
   end
 
   def read_file(s) File.open(s, 'r').read  end
   def read_url(xml_url)  open(xml_url, 'UserAgent' => 'S-Rscript').read  end
 
-  def get(s)
+  def test(s)
     @inputs = @inputs.first if @inputs.length == 1
-    super(s){yield(@inputs)}
+    get(s){yield(@inputs)}
   end
 
   def summary()
