@@ -4,6 +4,7 @@
 
 require 'rexml/document'
 require 'app-routes'
+require 'testdata_text'
 
 class Testdata
   include REXML
@@ -125,10 +126,24 @@ class Testdata
   def tests(*args)
     # override this method in the child class
   end
+    
+  def read_file(s) 
+    buffer = File.open(s, 'r').read
+    ext = url[/\.(\w+)$/,1]
+    method(('read_' + ext).to_sym).call(buffer)    
+  end
+    
+  def read_url(url)
+    buffer = open(url, 'UserAgent' => 'Testdata').read  
+    ext = url[/.*\/[^\.]+\.(\w+)/,1]
+    method(('read_' + ext).to_sym).call(buffer)
+  end
 
-  def read_file(s) File.open(s, 'r').read  end
-  def read_url(xml_url)  open(xml_url, 'UserAgent' => 'S-Rscript').read  end
+  def read_xml(buffer)
+    buffer
+  end
 
+              
   def test(s)
     @inputs = @inputs.first if @inputs.length == 1
     get(s){yield(@inputs)}
