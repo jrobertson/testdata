@@ -37,6 +37,7 @@ class Testdata
 
     buffer =  procs[s.class.to_s.to_sym].call(s)
     @doc = Document.new(buffer)
+  
     o = {log: false}.merge(options)
     @log =  o[:log] == true ? Document.new(tests) : nil
   end
@@ -83,8 +84,12 @@ class Testdata
   def test_all(x)
     x ||=(0..-1)
 
+    break_on_fail = XPath.first(@doc.root, 
+                            'summary/break_on_fail/text()') == 'true'
+
     XPath.match(@doc.root, "records/test/summary/path/text()")[x].each do |id|
-      test_id(id)
+      result = test_id(id)
+      break if result == false and break_on_fail 
     end
   end
 
@@ -128,6 +133,7 @@ class Testdata
       result = false
     ensure
       @success[-1][0] = result
+      result
     end
   end
 
