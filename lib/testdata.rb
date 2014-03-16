@@ -61,15 +61,14 @@ class Testdata
 
     input_names = input_nodes.map(&:name)
     
-    # find the type or description
-    xpath = "summary/type/text() | summary/description/text()"
-    type_or_desc = XPath.match(node, xpath).map(&:to_s).find{|x| x != ''}
+    summary = XPath.first node, 'summary'
+    type, desc = summary.text('type'), summary.text('description')
 
     xpath = "records/io/summary[type='output']/*"
     raw_output = XPath.match(node, xpath)
     output_values = raw_output.length > 0 ? raw_output[1..-1].map(&stringify) : []
     
-    [path_no, input_values, input_names, type_or_desc, output_values]
+    [path_no, input_values, input_names, type, output_values, desc]
   end
 
   def run(x=nil, debug2=nil)
@@ -95,11 +94,13 @@ class Testdata
 
   def test_id(id='')
 
-    path_no, inputs, input_names, tod, expected = testdata_values(id.to_s)
-
+    path_no, inputs, input_names, type, expected, @desc = 
+                                          testdata_values(id.to_s)
     @inputs = inputs
     tests() # load the routes
-    raw_actual = run_route tod
+
+    raw_actual = run_route type
+    puts  "warning: no test route found for " + type unless raw_actual
 
     result = nil
     @success << [nil, path_no.to_i]      
@@ -117,7 +118,7 @@ class Testdata
             .join("\n")
 
           puts "\ninputs: \n" + inputs
-          puts "\ntype or description:\n  " + tod
+          puts "\ntype or description:\n %s: %s" % [type, @desc]
           puts "\nexpected : \n  " + b.inspect
           puts "\nactual : \n  " + a.inspect + "\n"
         end
@@ -163,8 +164,8 @@ class Testdata
 
 
   def test(s)
-    @inputs = @inputs.first if @inputs.length == 1
-    self.add_route(s){yield(@inputs)}
+    #@inputs = @inputs.first if @inputs.length == 1
+    self.add_route(s){yield(*(@inputs + [@desc]))}
   end
 
   def summary()
