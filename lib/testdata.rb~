@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 
 # file: testdata.rb
 
@@ -13,7 +13,12 @@ class Testdata
   attr_accessor :debug
 
   def initialize(s, options={})
-    @route = {}; @params = {} # used by app-routes
+
+    super()
+
+    @params = {}
+    #routes()
+
     @success = [] # used by summary
     @debug = false
 
@@ -33,7 +38,9 @@ class Testdata
     }
 
     buffer =  procs[s.class.to_s.to_sym].call(s)
+
     @doc = Document.new(buffer)
+
     o = {log: false}.merge(options)
     @log =  o[:log] == true ? Document.new(tests) : nil
   end
@@ -42,7 +49,8 @@ class Testdata
 
     stringify = Proc.new do |x| 
       r = x.text.to_s.gsub(/^[\n\s]+/,'').length > 0 ? x.text : x.cdatas.join.strip
-      REXML::Text::unnormalize(r)
+      #REXML::Text::unnormalize(r)
+      r
     end
 
     node = XPath.first(@doc.root, "records/test[summary/path='#{id}']")
@@ -50,26 +58,27 @@ class Testdata
 
     path_no = node.text('summary/path').to_s
 
-    xpath = "records/io/summary[type='input']/*"
-    input_nodes = XPath.match(node, xpath)[1..-1]
-    input_values = input_nodes.map(&stringify)   
+    xpath = "records/input/summary/*"
+    input_nodes = XPath.match(node, xpath) #[1..-1]
+    input_values = input_nodes.map(&stringify)  + []
+
     input_names = input_nodes.map(&:name)
     
-    # find the type or description
-    xpath = "summary/type/text() | summary/description/text()"
-    type_or_desc = XPath.match(node, xpath).map(&:to_s).find{|x| x != ''}
+    summary = XPath.first node, 'summary'
+    type, desc = summary.text('type'), summary.text('description')
 
-    xpath = "records/io/summary[type='output']/*"
+    xpath = "records/output/summary/*"
     raw_output = XPath.match(node, xpath)
-    output_values = raw_output.length > 0 ? raw_output[1..-1].map(&stringify) : []
+    output_values = raw_output.length > 0 ? raw_output.map(&stringify) : []
     
-    [path_no, input_values, input_names, type_or_desc, output_values]
+    [path_no, input_values, input_names, type, output_values, desc]
   end
 
   def run(x=nil, debug2=nil)
     @debug2 = debug2 ? true : false
     @success = []
     procs = {NilClass: :test_all, Range: :test_all, String: :test_id, Fixnum: :test_id}
+
     method(procs[x.class.to_s.to_sym]).call(x)
     summary()
   end
@@ -77,17 +86,24 @@ class Testdata
   def test_all(x)
     x ||=(0..-1)
 
+    break_on_fail = XPath.first(@doc.root, 
+                            'summary/break_on_fail/text()') == 'true'
+
     XPath.match(@doc.root, "records/test/summary/path/text()")[x].each do |id|
-      puts 'id : ' + id.to_s
-      test_id(id)
+      result = test_id(id)
+      break if result == false and break_on_fail 
     end
   end
 
   def test_id(id='')
 
-    path_no, @inputs, input_names, tod, expected = testdata_values(id.to_s)
+    path_no, inputs, input_names, type, expected, @desc = 
+                                          testdata_values(id.to_s)
+    @inputs = inputs
     tests() # load the routes
-    raw_actual = run_route tod
+
+    raw_actual = run_route type
+    puts  "warning: no test route found for " + type unless raw_actual
 
     result = nil
     @success << [nil, path_no.to_i]      
@@ -100,10 +116,12 @@ class Testdata
         b = expected.map(&:strip)
 
         if @debug == true or @debug2 == true then
-          inputs = input_names.zip(@inputs).map{|x| '  ' + x.join(": ")}\
+          
+          inputs = input_names.zip(inputs).map{|x| '  ' + x.join(": ")}\
             .join("\n")
+
           puts "\ninputs: \n" + inputs
-          puts "\ntype or description:\n  " + tod
+          puts "\ntype or description:\n %s: %s" % [type, @desc]
           puts "\nexpected : \n  " + b.inspect
           puts "\nactual : \n  " + a.inspect + "\n"
         end
@@ -115,11 +133,11 @@ class Testdata
 
     rescue Exception => e  
       err_label = e.message + " :: \n" + e.backtrace.join("\n")
-
-      puts err_label
+      raise 'testdata :' + err_label
       result = false
     ensure
       @success[-1][0] = result
+      result
     end
   end
 
@@ -127,26 +145,30 @@ class Testdata
     # override this method in the child class
   end
 
-  def read_file(s) File.open(s, 'r').read  end
+  def read_file(s) 
+    buffer = File.open(s, 'r').read
+    ext = url[/\.(\w+)$/,1]
+    method(('read_' + ext).to_sym).call(buffer)    
+  end
     
   def read_url(url)
+    buffer = open(url, 'UserAgent' => 'Testdata').read  
     ext = url[/.*\/[^\.]+\.(\w+)/,1]
-    method(('read_' + ext).to_sym).call(url)
+    method(('read_' + ext).to_sym).call(buffer)
   end
 
-  def read_xml(url)
-    open(url, 'UserAgent' => 'S-Rscript').read  
+  def read_xml(buffer)
+    buffer
   end
   
-  def read_td(url)
-    txt = open(url, 'UserAgent' => 'Testdata').read
-    TestdataText.parse(txt)
+  def read_td(buffer)
+    TestdataText.parse buffer
   end
 
-              
+
   def test(s)
-    @inputs = @inputs.first if @inputs.length == 1
-    get(s){yield(@inputs)}
+    #@inputs = @inputs.first if @inputs.length == 1
+    self.add_route(s){yield(*(@inputs + [@desc]))}
   end
 
   def summary()

@@ -6,6 +6,7 @@ require 'rexml/document'
 require 'app-routes'
 require 'testdata_text'
 
+
 class Testdata
   include REXML
   include AppRoutes
@@ -13,7 +14,9 @@ class Testdata
   attr_accessor :debug
 
   def initialize(s, options={})
+
     super()
+
     @params = {}
     #routes()
 
@@ -36,8 +39,9 @@ class Testdata
     }
 
     buffer =  procs[s.class.to_s.to_sym].call(s)
+
     @doc = Document.new(buffer)
-  
+
     o = {log: false}.merge(options)
     @log =  o[:log] == true ? Document.new(tests) : nil
   end
@@ -55,8 +59,8 @@ class Testdata
 
     path_no = node.text('summary/path').to_s
 
-    xpath = "records/io/summary[type='input']/*"
-    input_nodes = XPath.match(node, xpath)[1..-1]
+    xpath = "records/input/summary/*"
+    input_nodes = XPath.match(node, xpath) #[1..-1]
     input_values = input_nodes.map(&stringify)  + []
 
     input_names = input_nodes.map(&:name)
@@ -64,9 +68,9 @@ class Testdata
     summary = XPath.first node, 'summary'
     type, desc = summary.text('type'), summary.text('description')
 
-    xpath = "records/io/summary[type='output']/*"
+    xpath = "records/output/summary/*"
     raw_output = XPath.match(node, xpath)
-    output_values = raw_output.length > 0 ? raw_output[1..-1].map(&stringify) : []
+    output_values = raw_output.length > 0 ? raw_output.map(&stringify) : []
     
     [path_no, input_values, input_names, type, output_values, desc]
   end
@@ -111,7 +115,7 @@ class Testdata
 
         a = raw_actual.is_a?(String) ? [raw_actual].flatten.map(&:strip) : raw_actual
         b = expected.map(&:strip)
-        #puts 'b :' + b.inspect
+
         if @debug == true or @debug2 == true then
           
           inputs = input_names.zip(inputs).map{|x| '  ' + x.join(": ")}\
