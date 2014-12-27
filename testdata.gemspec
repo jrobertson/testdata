@@ -1,11 +1,12 @@
 Gem::Specification.new do |s|
   s.name = 'testdata'
-  s.version = '0.8.13'
+  s.version = '0.9.0'
   s.summary = 'testdata'
     s.authors = ['James Robertson']
   s.files = Dir['lib/**/*.rb']
   s.add_runtime_dependency('app-routes', '~> 0.1', '>=0.1.18')
-  s.add_runtime_dependency('testdata_text', '~> 0.1', '>=0.1.3') 
+  s.add_runtime_dependency('testdata_text', '~> 0.1', '>=0.1.3')
+  s.add_runtime_dependency('diffy', '~> 3.0', '>=3.0.7') 
   s.signing_key = '../privatekeys/testdata.pem'
   s.cert_chain  = ['gem-public_cert.pem']
   s.license = 'MIT'
