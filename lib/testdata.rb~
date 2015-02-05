@@ -5,7 +5,11 @@
 require 'rexml/document'
 require 'app-routes'
 require 'testdata_text'
+require 'diffy'
 
+
+class TestdataException < Exception
+end
 
 class Testdata
   include REXML
@@ -14,7 +18,7 @@ class Testdata
   attr_accessor :debug
 
   def initialize(s, options={})
-
+    
     super()
 
     @params = {}
@@ -46,6 +50,17 @@ class Testdata
     @log =  o[:log] == true ? Document.new(tests) : nil
   end
 
+  def run(x=nil, debug2=nil)
+    @debug2 = debug2 ? true : false
+    @success = []
+    procs = {NilClass: :test_all, Range: :test_all, String: :test_id, Fixnum: :test_id}
+
+    method(procs[x.class.to_s.to_sym]).call(x)
+    summary()
+  end
+  
+  private
+  
   def testdata_values(id)
 
     stringify = Proc.new do |x| 
@@ -55,15 +70,18 @@ class Testdata
     end
 
     node = XPath.first(@doc.root, "records/test[summary/path='#{id}']")
-    raise "Path error: node title not found" unless node
+    raise TestdataException, "Path error: node title not found" unless node
 
     path_no = node.text('summary/path').to_s
 
     xpath = "records/input/summary/*"
     input_nodes = XPath.match(node, xpath) #[1..-1]
+
     input_values = input_nodes.map(&stringify)  + []
 
     input_names = input_nodes.map(&:name)
+    raise TestdataException, 'inputs not found' if input_values.empty? \
+                                                      or input_names.empty?
     
     summary = XPath.first node, 'summary'
     type, desc = summary.text('type'), summary.text('description')
@@ -71,18 +89,12 @@ class Testdata
     xpath = "records/output/summary/*"
     raw_output = XPath.match(node, xpath)
     output_values = raw_output.length > 0 ? raw_output.map(&stringify) : []
-    
+
     [path_no, input_values, input_names, type, output_values, desc]
+
   end
 
-  def run(x=nil, debug2=nil)
-    @debug2 = debug2 ? true : false
-    @success = []
-    procs = {NilClass: :test_all, Range: :test_all, String: :test_id, Fixnum: :test_id}
 
-    method(procs[x.class.to_s.to_sym]).call(x)
-    summary()
-  end
 
   def test_all(x)
     x ||=(0..-1)
@@ -128,13 +140,18 @@ class Testdata
         end
 
         result = a == b
+        
+        if (@debug == true or @debug2 == true) and result == false then
+          # diff the expected and actual valuess
+          puts Diffy::Diff.new(a.first, b.first)
+        end
       else
         result = [raw_actual].compact == expected
       end
 
     rescue Exception => e  
       err_label = e.message + " :: \n" + e.backtrace.join("\n")
-      raise 'testdata :' + err_label
+      raise TestdataException,  err_label
       result = false
     ensure
       @success[-1][0] = result
