@@ -53,7 +53,7 @@ module Testdata
     def run(x=nil, debug2=nil)
       @debug2 = debug2 ? true : false
       @success = []
-      procs = {NilClass: :test_all, Range: :test_all, String: :test_id, Fixnum: :test_id}
+      procs = {NilClass: :test_all, Range: :test_range, String: :test_id, Fixnum: :test_id}
 
       method(procs[x.class.to_s.to_sym]).call(x)
       summary()
@@ -82,6 +82,7 @@ module Testdata
       xpath = "records/output/summary/*"
       output_nodes = node.xpath(xpath) #[1..-1]
       output_values = output_nodes.map{|x| x.texts.map(&:unescape).join.strip}
+      #puts "input values: %s; output values: %s" % [input_values, output_values]
 
       [path_no, input_values, input_names, type, output_values, desc]
 
@@ -153,6 +154,12 @@ module Testdata
       end
     end
 
+    def test_range(range)
+      
+      a = @doc.root.xpath("records/test/summary/path/text()")
+      a[range].each {|x| test_id x}
+    end
+    
     def tests(*args)
       # override this method in the child class
     end

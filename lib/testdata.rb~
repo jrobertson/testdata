@@ -62,9 +62,7 @@ module Testdata
     private
     
     def testdata_values(id)
-
       
-
       node = @doc.root.element "records/test[summary/path='#{id}']"
 
       raise TestdataException, "Path error: node title not found" unless node
@@ -83,7 +81,7 @@ module Testdata
 
       xpath = "records/output/summary/*"
       output_nodes = node.xpath(xpath) #[1..-1]
-      output_values = input_nodes.map{|x| x.texts.map(&:unescape).join.strip}
+      output_values = output_nodes.map{|x| x.texts.map(&:unescape).join.strip}
 
       [path_no, input_values, input_names, type, output_values, desc]
 
@@ -202,42 +200,55 @@ module Testdata
     def initialize(s)
       
       super()
-      @to_s = ''
+      @a = []
     
       buffer, _ = RXFHelper.read(s)
 
-      doc = Rexle.new(buffer)
+      @doc = Rexle.new(buffer)
 
-      # get the template
-      template = doc.root.xpath('summary/test_unit/text()').join.strip
-      raise 'no test_unit template found' unless template
-
-      doc.root.xpath('records/test').map do |test|
-        path, type, description = test.xpath('summary/*/text()')
+      @doc.root.xpath('records/test').map do |test|
         
-        inputs = test.xpath('records/input/summary/*/text()')
-        outputs = test.xpath('records/output/summary/*/text()')
-        records = test.element('records')
+        path, type, description = test.xpath('summary/*/text()')        
+        records = test.element('records')        
         
         inputs = records.xpath('input/summary/*').map\
                                             {|x| [x.name, x.texts.join.strip]}
-        inputs.each do |name, value|
-          template.sub!(/<%=\s*input\.#{name}\s*%>/, \
-                                        '"' + value.gsub('"','\"') + '"')
-        end
 
         outputs = records.xpath('output/summary/*').map\
                                             {|x| [x.name, x.texts.join.strip]}
-        outputs.each do |name, value|
-          template.sub!(/<%=\s*output\.#{name}\s*%>/, \
-                                        '"' + value.gsub('"','\"') + '"')
-        end
         
-        @to_s << template + "\n"
+        @a << {type: type, in: inputs, out: outputs}
         
       end
     
     end # end of initialize()
-  end # end of initialize()
+    
+    def to_s()
+=begin
+s = %Q(
+require_relative "#{testgem}"
+require "test/unit"
+ 
+class #{testclass} < Test::Unit::TestCase
+ 
+  def #{types[i]}
+    #{@lines.join("\n    ")}
+  end
   
+end
+)
+=end
+      #read the .rsf file
+      script = @doc.root.element('summary/script/text()')
+      raise 'script XML entry not found' unless script
+      
+      if script then
+        filename = script[/[\/]+\.rsf$/] 
+        buffer, _ = RXFHelper.read(filename)
+      end
+      #@a.group_by {|x| x[:type]}
+      
+      
+    end
+  end
 end
