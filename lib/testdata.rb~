@@ -68,9 +68,12 @@ module Testdata
       raise TestdataException, "Path error: node title not found" unless node
 
       path_no = node.text('summary/path')
+      puts 'path_no : ' + path_no.inspect
       xpath = "records/input/summary/*"
+      puts 'node : ' + node.xml.inspect
       input_nodes = node.xpath(xpath) #[1..-1]
-      input_values = input_nodes.map{|x| x.texts.map(&:unescape).join.strip}  + []
+      puts 'input:nodes : ' + input_nodes.inspect
+      input_values = input_nodes.map{|x| x.texts.join.strip}  + []
 
       input_names = input_nodes.map(&:name)
       raise TestdataException, 'inputs not found' if input_values.empty? \
@@ -81,8 +84,7 @@ module Testdata
 
       xpath = "records/output/summary/*"
       output_nodes = node.xpath(xpath) #[1..-1]
-      output_values = output_nodes.map{|x| x.texts.map(&:unescape).join.strip}
-      #puts "input values: %s; output values: %s" % [input_values, output_values]
+      output_values = output_nodes.map{|x| x.texts.join.strip}
 
       [path_no, input_values, input_names, type, output_values, desc]
 
