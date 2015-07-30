@@ -5,7 +5,7 @@
 require 'app-routes'
 require 'testdata_text'
 require 'diffy'
-require 'dynarex'
+require 'polyrex'
 
 
 class TestdataException < Exception
@@ -217,7 +217,7 @@ module Testdata
 
     def read_file(s) 
       buffer = File.open(s, 'r').read
-      ext = url[/\.(\w+)$/,1]
+      ext = s[/\.(\w+)$/,1]
       method(('read_' + ext).to_sym).call(buffer)    
     end
       

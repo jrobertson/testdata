@@ -5,6 +5,7 @@
 require 'app-routes'
 require 'testdata_text'
 require 'diffy'
+require 'dynarex'
 
 
 class TestdataException < Exception
@@ -43,6 +44,7 @@ module Testdata
       }
 
       buffer =  procs[s.class.to_s.to_sym].call(s)
+
       @doc = Rexle.new(buffer)
       
       o = {log: false}.merge(options)
@@ -69,9 +71,11 @@ module Testdata
 
       path_no = node.text('summary/path')
       #puts 'path_no : ' + path_no.inspect
-      xpath = "records/input/summary/*"
+      input_summary = node.element 'records/input/summary'      
+      input_summary.delete 'schema | format_mask | recordx_type'
+
       #puts 'node : ' + node.xml.inspect
-      input_nodes = node.xpath(xpath) #[1..-1]
+      input_nodes = input_summary.xpath('*') #[1..-1]
       #puts 'input:nodes : ' + input_nodes.inspect
       input_values = input_nodes.map{|x| x.texts.join.strip}  + []
 
@@ -82,8 +86,10 @@ module Testdata
       summary = node.element 'summary'
       type, desc = summary.text('type'), summary.text('description')
 
-      xpath = "records/output/summary/*"
-      output_nodes = node.xpath(xpath) #[1..-1]
+      output_summary = node.element 'records/output/summary'      
+      output_summary.delete 'schema | format_mask | recordx_type'      
+
+      output_nodes = output_summary.xpath('*') #[1..-1]
       output_values = output_nodes.map{|x| x.texts.map(&:unescape).join.strip}
 
       [path_no, input_values, input_names, type, output_values, desc]
@@ -165,10 +171,53 @@ module Testdata
     def tests(*args)
       # override this method in the child class
     end
+    
+    def read_rdx(buffer)
+      
+      dx = Dynarex.new
+      dx.import buffer
+
+      sfields = dx.summary.keys - [:recordx_type, :format_mask, :schema, \
+        :default_key, :delimiter]
+
+
+      raw_inputs, raw_outputs = dx.fields.partition {|x| x[/_in$/]}
+
+      inputs = raw_inputs.map{|x| x.to_s[0..-4]}
+      outputs = raw_outputs.map{|x| x.to_s[0..-5]}
+      child_schema = "input[%s];output[%s]" % [inputs.join(','), outputs.join(',')]
+
+      px = Polyrex.new "tests[title, ruby_version, script, test_dir]" \
+                          + "/test[path,type,description]/{#{child_schema}}"
+
+      sfields.each do |x|
+        px.summary.send((x.to_s + '=').to_sym, dx.method(x).call)
+      end
+
+      dx.all.each.with_index do |x, i|
+
+        px.create.test(path: (i+1).to_s, type: dx.test_type) do |create|
+          
+          raw_inputs.each do |fld_in| 
+            create.input(fld_in[0..-4].to_sym => \
+                                        x.method(fld_in.to_sym).call)
+          end
+
+          raw_outputs.each do |fld_out|
+            create.output(fld_out[0..-5].to_sym => \
+                                        x.method(fld_out.to_sym).call)
+          end
+        end
+
+      end
+
+      px.to_xml
+        
+    end
 
     def read_file(s) 
       buffer = File.open(s, 'r').read
-      ext = url[/\.(\w+)$/,1]
+      ext = s[/\.(\w+)$/,1]
       method(('read_' + ext).to_sym).call(buffer)    
     end
       
