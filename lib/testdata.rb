@@ -52,9 +52,18 @@ module Testdata
       @log =  o[:log] == true ? Rexle.new(tests) : nil
     end
 
-    def run(x=nil, debug2=nil)
+    def run(raw_x=nil, debug2=nil)
+      
       @debug2 = debug2 ? true : false
       @success = []
+      
+      x = if raw_x and raw_x[/\d+\.\.\d+/] then
+        x, y = raw_x.split('..').map(&:to_i)
+        id = Range.new(x,y)
+      else
+        raw_x
+      end
+      
       procs = {NilClass: :test_all, Range: :test_range, String: :test_id, Fixnum: :test_id}
 
       method(procs[x.class.to_s.to_sym]).call(x)
