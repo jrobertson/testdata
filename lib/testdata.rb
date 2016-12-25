@@ -64,7 +64,8 @@ module Testdata
         raw_x
       end
       
-      procs = {NilClass: :test_all, Range: :test_range, String: :test_id, Fixnum: :test_id}
+      procs = {NilClass: :test_all, Range: :test_range, String: :test_id, 
+               Integer: :test_id, Fixnum: :test_id}
 
       method(procs[x.class.to_s.to_sym]).call(x)
       summary()
@@ -73,26 +74,33 @@ module Testdata
     private
     
     def testdata_values(id)
-      
+      #puts 'testdata_values: id ' + id.inspect
+      #exit
       node = @doc.root.element "records/test[summary/path='#{id}']"
-
+      #puts 'node: ' + node.xml.inspect
+      #exit
       raise TestdataException, "Path error: node title not found" unless node
 
       path_no = node.text('summary/path')
       #puts 'path_no : ' + path_no.inspect
       input_summary = node.element 'records/input/summary'      
       input_summary.delete 'schema | format_mask | recordx_type'
+      #puts 'input_summary ' + input_summary.xml.inspect
 
       #puts 'node : ' + node.xml.inspect
       input_nodes = input_summary.xpath('*') #[1..-1]
+
       #puts 'input:nodes : ' + input_nodes.inspect
       input_values = input_nodes.map{|x| x.texts.join.strip}  + []
+      #puts 'input_values : ' + input_values.inspect
 
       input_names = input_nodes.map(&:name)
+      #puts 'input_names : ' + input_names.inspect
       raise TestdataException, 'inputs not found' if input_values.empty? \
                                                         or input_names.empty?
 
       summary = node.element 'summary'
+
       type, desc = summary.text('type'), summary.text('description')
 
       output_summary = node.element 'records/output/summary'      
@@ -124,6 +132,7 @@ module Testdata
       path_no, inputs, input_names, type, expected, @desc = 
                                             testdata_values(id.to_s)
       @inputs = inputs
+      #puts 'after inputs'
       tests() # load the routes
 
       raw_actual = run_route type
