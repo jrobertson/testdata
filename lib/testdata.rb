@@ -108,12 +108,25 @@ module Testdata
       x ||=(0..-1)
 
       break_on_fail = @doc.root.element('summary/break_on_fail/text()') == 'true'
+      
+      test_id = nil
 
-      @doc.root.xpath("records/test/summary/path/text()")[x].each do |id|
+      begin
+        
+        @doc.root.xpath("records/test/summary/path/text()")[x].each do |id|
+          
+          test_id = id
+          puts 'testing id: ' + id.inspect
+          result = test_id(id)
+          break if result == false and break_on_fail 
+          
+        end
+        
+      rescue
 
-        result = test_id(id)
-        break if result == false and break_on_fail 
+        @success << [false, test_id.to_i]
       end
+      
 
     end
 
@@ -182,7 +195,7 @@ module Testdata
     end
     
     def read_rdx(buffer)
-      
+      puts 'inside read_rdf: buffer: ' + buffer.inspect
       dx = Dynarex.new
       dx.import buffer
 
@@ -242,6 +255,7 @@ module Testdata
     end
     
     def read_td(buffer)
+      puts 'buffer: ' + buffer
       TestdataText.parse buffer
     end
 
