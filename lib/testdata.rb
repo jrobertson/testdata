@@ -55,6 +55,15 @@ module Testdata
 
     def run(raw_x=nil, debug2=nil)
       
+      # verify the document  has unique path numbers
+      
+      a = @doc.root.xpath('records/test/summary/path/text()')
+      duplicates = a.select{ |e| a.count(e) > 1 }.uniq
+      
+      if duplicates.any? then
+        raise 'Duplicate path found. Path: ' + duplicates.inspect 
+      end
+
       @debug2 = debug2 ? true : false
       @success = []
       
@@ -64,7 +73,7 @@ module Testdata
       else
         raw_x
       end
-      
+
       procs = {NilClass: :test_all, Range: :test_range, String: :test_id, 
                Integer: :test_id, Fixnum: :test_id}
 
