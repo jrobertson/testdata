@@ -6,6 +6,7 @@ require 'app-routes'
 require 'testdata_text'
 require 'diffy'
 require 'polyrex'
+require 'yaml'
 
 
 class TestdataException < Exception
