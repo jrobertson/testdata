@@ -4,7 +4,7 @@
 
 require 'app-routes'
 require 'testdata_text'
-require 'diffy'
+require 'diffyc32'
 require 'polyrex'
 require 'yaml'
 
@@ -15,6 +15,7 @@ end
 module Testdata
   
   class Base
+    using ColouredText
 
     include AppRoutes
 
@@ -167,10 +168,10 @@ module Testdata
             inputs = input_names.zip(inputs).map{|x| '  ' + x.join(": ")}\
               .join("\n")
 
-            puts "\ninputs: \n" + inputs
-            puts "\ntype or description:\n %s: %s" % [type, @desc]
-            puts "\nexpected : \n  " + b.inspect
-            puts "\nactual : \n  " + a.inspect + "\n"
+            puts "\ninputs: \n".bold + inputs
+            puts "\ntype or description:".bold + "\n %s %s".cyan % [type, @desc]
+            puts "\nexpected : \n  ".bold + b.inspect
+            puts "\nactual : \n  ".bold + a.inspect + "\n"
           end
 
           result = a == b
@@ -178,7 +179,13 @@ module Testdata
           if (@debug == true or @debug2 == true) and result == false then
 
             # diff the expected and actual valuess
-            puts Diffy::Diff.new(a.first, b.first)
+            r = Diffy::Diff.new(a.first, b.first).to_s
+            r2 = r.lines.map do |line|
+              line.sub(/^\- {4}/) {|x| "-    ".light_green}\
+                  .sub(/^\+ {4}/) {|x| "+    ".light_red}
+            end
+            #puts 'r: ' + r.lines.inspect
+            puts r2
           end
         else
           result = [raw_actual].compact == expected
@@ -277,11 +284,19 @@ module Testdata
     def summary()
       success = @success.map(&:first)
       a = @success.map(&:last).sort
-      {
+      h = {
         passed: success.all?,
         score:  [success.grep(true), success].map(&:length).join('/'),
         failed:  @success.select{|x| x[0] == false}.map(&:last).sort
       }
+      
+      def h.to_s()
+        passed = self[:passed] ? self[:passed].to_s.light_green : self[:passed].to_s.light_red
+        "{passed: #{passed}, score: #{self[:score]}, failed: #{self[:failed]}}"        
+        
+      end
+      
+      h
     end
   end
 
