@@ -174,18 +174,14 @@ module Testdata
             puts "\nactual : \n  ".bold + a.inspect + "\n"
           end
 
-          result = a == b
+          result = a.join.force_encoding("UTF-8") == \
+              b.join.force_encoding("UTF-8")
           
           if (@debug == true or @debug2 == true) and result == false then
 
             # diff the expected and actual valuess
-            r = Diffy::Diff.new(a.first, b.first).to_s
-            r2 = r.lines.map do |line|
-              line.sub(/^\- {4}/) {|x| "-    ".light_green}\
-                  .sub(/^\+ {4}/) {|x| "+    ".light_red}
-            end
-            #puts 'r: ' + r.lines.inspect
-            puts r2
+            puts DiffyC32.new(b.first, a.first).to_s
+  
           end
         else
           result = [raw_actual].compact == expected
