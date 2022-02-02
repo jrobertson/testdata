@@ -52,9 +52,11 @@ module Testdata
       o = {log: false}.merge(options)
 
       @log =  o[:log] == true ? Rexle.new(tests) : nil
+
+
     end
 
-    def run(raw_x=nil, debug2=nil)
+    def run(raw_x=nil, debug2=nil, results_file: nil)
 
       # verify the document  has unique path numbers
 
@@ -79,6 +81,7 @@ module Testdata
                Integer: :test_id, Fixnum: :test_id}
 
       method(procs[x.class.to_s.to_sym]).call(x)
+      @results_file = results_file if raw_x.nil? and results_file
       summary()
     end
 
@@ -278,6 +281,7 @@ module Testdata
     end
 
     def summary()
+
       success = @success.map(&:first)
       a = @success.map(&:last).sort
       h = {
@@ -292,7 +296,27 @@ module Testdata
 
       end
 
-      h
+      if @results_file then
+
+        dx = if File.exists?(@results_file) then
+          Dynarex.new @results_file
+        else
+          Dynarex.new schema: "gems/gemx(title, last_tested, passed, score)",
+              filepath: @results_file
+        end
+
+        title = @doc.root.element('summary/title/text()')
+        h2 = {title: title, last_tested: Time.now.to_s, passed: h[:passed].to_s, score: h[:score]}
+
+        dx.create(h2)
+        dx.save
+        puts 'results file saved at ' + @results_file.inspect if @debug
+
+        #puts dx.all.first
+
+      end
+
+      return h
     end
   end
 
