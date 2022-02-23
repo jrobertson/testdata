@@ -7,6 +7,7 @@ require 'testdata_text'
 require 'diffyc32'
 require 'polyrex'
 require 'yaml'
+require 'rxfreader'
 
 
 class TestdataException < Exception
@@ -15,6 +16,7 @@ end
 module Testdata
 
   class Base
+    include RXFRead
     using ColouredText
 
     include AppRoutes
@@ -255,7 +257,7 @@ module Testdata
     end
 
     def read_file(s)
-      buffer = File.open(s, 'r').read
+      buffer = FileX.read(s)
       ext = s[/\.(\w+)$/,1]
       method(('read_' + ext).to_sym).call(buffer)
     end
@@ -298,7 +300,7 @@ module Testdata
 
       if @results_file then
 
-        dx = if File.exists?(@results_file) then
+        dx = if FileX.exists?(@results_file) then
           Dynarex.new @results_file
         else
           Dynarex.new schema: "gems/gemx(title, last_tested, passed, score)",
@@ -329,7 +331,7 @@ module Testdata
       super()
       @a = []
 
-      buffer, _ = RXFHelper.read(s)
+      buffer, _ = RXFReader.read(s)
 
       @doc = Rexle.new(buffer)
 
@@ -371,7 +373,7 @@ end
 
       if script then
         filename = script[/[\/]+\.rsf$/]
-        buffer, _ = RXFHelper.read(filename)
+        buffer, _ = RXFReader.read(filename)
       end
       #@a.group_by {|x| x[:type]}
 

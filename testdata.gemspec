@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name = 'testdata'
-  s.version = '1.1.12'
+  s.version = '1.1.13'
   s.summary = 'A test framework which accepts test data in a Polyrex format.'
   s.authors = ['James Robertson']
   s.files = Dir['lib/testdata.rb']
